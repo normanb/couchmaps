@@ -59,7 +59,7 @@ tmp = /myothertmp
 
 6) Populate database
 
-ogr2ogr -f couchdb -lco "UPDATE_PERMISSIONS=ALL" "couchdb:http://gsgrhel5:8000" bcpos_trails.shp 
+ogr2ogr -f couchdb -lco "UPDATE_PERMISSIONS=ALL" "couchdb:http://localhost:8000" bcpos_trails.shp 
 
 7) Create a database called mapserver 
 
