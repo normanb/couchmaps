@@ -20,11 +20,12 @@
 %% Database request handlers
 handle_request(#httpd{
     method='GET',
+    db_frontend=DbFrontend,
     path_parts=[_DbName, _MapServ, MapFile]
 }=Req, Db) ->
   % format the request
   % get the MapServer mapfile in JSON format from couchdb and call mapserver
-  case couch_httpd_db:couch_doc_open(Db, MapFile, nil, []) of
+  case DbFrontend:couch_doc_open(Db, MapFile, nil, []) of
     {not_found, _} ->
 	% nothing to do send message back
 	couch_httpd:send_response(Req, 204, [], <<>>);

@@ -2,7 +2,7 @@ COUCH_HOME=~/projects/couchdb
 ERLC=erlc
 EBIN=ebin
 
-COUCH_INCLUDE=~/projects/couchdb/src/couchdb
+COUCH_INCLUDE= ~/projects/couchdb/couchdb/dependencies/couchdb/src/couchdb
 
 EFLAGS=-o ${EBIN} -I ${COUCH_INCLUDE}
 

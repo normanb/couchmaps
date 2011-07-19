@@ -139,7 +139,7 @@ process_element("SIZE") -> map_element;
 process_element("IMAGEPATH") -> {map_element, quote};
 process_element("IMAGEURL") -> {map_element, quote};
 process_element("SHAPEPATH") -> map_element;
-process_element("NAME") -> map_element;
+process_element("NAME") -> {map_element, quote};
 process_element("FONTSET") -> map_element;
 process_element("UNITS") -> map_element;
 process_element("STATUS") -> map_element;
@@ -156,6 +156,7 @@ process_element("CONNECTION") -> {map_element, quote};
 process_element("TYPE") -> map_element;
 process_element("FILLED") -> map_element;
 process_element("TRANSFORM") -> map_element;
+process_element("DUMP") -> map_element;
 process_element("TEXT") -> {map_element, quote};
 process_element(_Element) -> false.
 
@@ -170,6 +171,9 @@ map_match([<<?MAP, _/binary>> | Rem], Acc)  ->
 map_match([], Acc, _Levels) ->
    Acc;
 
+map_match([<<"#", _/binary>> | Rem], Acc, Levels) ->
+  map_match(Rem, Acc, Levels);
+  
 map_match([<<?QUERYMAP, _/binary>> | Rem], Acc, [{Level, Init}| _] = Levels) ->
   Object = new_obj(?QUERYMAP, Init),
   map_match(Rem, <<Acc/binary, Object/binary>>, [new_level(Level) | Levels]); 
@@ -312,21 +316,27 @@ trim_value([<<>> | Rem], Acc) ->
    trim_value(Rem, Acc);
    
 trim_value(V, Acc) ->
-   % lose trailing comments
-   Values = lists:takewhile(fun(X) ->
-      case X of
-         <<>> ->
-	    true;
-	 _ ->
-            <<F, _/binary>> = X,
-             F /= $#
-      end
-   end, V),
-   
+   % lose trailing comments, extra spaces are also taken out
+   {_, Values} = lists:foldl(fun(X, {Do, NewAcc}) ->
+        case Do of
+	   true ->
+	      case X of 
+	          <<>> -> 
+		     {Do, NewAcc};
+		  <<$#, _/binary>> ->
+		      {false, NewAcc};
+		  _ ->
+		      {Do, [X|NewAcc]}
+	       end;
+	   _ ->
+	      {Do, NewAcc}
+	end
+   end, {true, []}, V),
+
    PropValue = case length(Values) > 1 of
       true ->
          % create a json array of numbers or pad strings
-	 [H | Rem] = Values,
+	 [H | Rem] = lists:reverse(Values),
 	 case H of
 	    <<"\"", _/binary>> -> 
 	        lists:foldl(fun(X, NewAcc) ->
@@ -378,7 +388,7 @@ remove_leading_spaces(WithoutSpaces) ->
     WithoutSpaces.
 
 test() ->
-  {ok, MapFile} = file:read_file("test.map"),
+  {ok, MapFile} = file:read_file("sample.map"),
   {ok, JsonMap} = to_json(MapFile),  
   {ok, JsonFd} = file:open("result.json", [write, binary]),
   file:write(JsonFd, JsonMap),

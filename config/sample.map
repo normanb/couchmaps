@@ -1,0 +1,59 @@
+MAP
+
+NAME "OWS_server"
+STATUS ON
+SIZE 400 300
+EXTENT -180 -90 180 90
+UNITS DD
+IMAGECOLOR 255 255 255
+
+
+#
+# Start of web interface definition
+#
+WEB
+  IMAGEPATH "/tmp/"
+  IMAGEURL "/var/www/html/tmp/"
+  METADATA
+    "ows_title"                  "OWS Demo Server for MapServer" ## REQUIRED
+    "ows_onlineresource"         "http://gsgrhel5:8000/mapserver/_mapserv/sample.map" ## Recommended
+    "ows_srs"                    "EPSG:4326 EPSG:4269 EPSG:3978 EPSG:3857" ## Recommended
+    "ows_abstract"               "This text describes my service." ## Recommended
+    "ows_enable_request" "*"
+  END
+END
+
+PROJECTION
+  "init=epsg:4326"
+END
+
+#
+# Start of layer definitions
+#
+
+##################
+# Boulder
+##################
+LAYER
+  NAME "BoulderOpenSpace"
+  METADATA
+    "ows_title"             "Boulder Open Space" ##REQUIRED
+    "ows_srs"               "EPSG:4326" ## REQUIRED
+    "gml_featureid"         "OBJECTID_1" ## REQUIRED
+  END
+  TYPE LINE 
+  CLASS
+    STYLE
+      COLOR 100 100 255
+    END
+  END
+  STATUS ON
+  CONNECTIONTYPE OGR
+  CONNECTION "couchdb:http://localhost:8000/bcpos_trails"
+  PROJECTION
+    "init=epsg:4326"
+  END
+  DUMP TRUE             ## REQUIRED
+END #layer
+
+END #mapfile
