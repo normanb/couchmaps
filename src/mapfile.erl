@@ -157,6 +157,7 @@ process_element("TYPE") -> map_element;
 process_element("FILLED") -> map_element;
 process_element("TRANSFORM") -> map_element;
 process_element("DUMP") -> map_element;
+process_element("DATA") -> {map_element, quote};
 process_element("TEXT") -> {map_element, quote};
 process_element(_Element) -> false.
 
