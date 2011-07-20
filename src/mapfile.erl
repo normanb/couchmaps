@@ -44,6 +44,7 @@
 
 -define(NEWOBJ, ":{").
 -define(COORDINATES, "coordinates").
+-define(LAYERS, "layers").
 
 from_json({MapJson}) ->
    % parse a JSON map file
@@ -53,11 +54,12 @@ from_json({MapJson}) ->
 to_json(MapFile) ->
   % parse the tokenised string in reverse, creating objects 
   MapParts = binary:split(MapFile, [<<"\r\n">>, <<"\n">>], [trim, global]),
-  Result = map_match([remove_leading_spaces(B) || B <- MapParts], <<>>),
-  {ok, binary_to_list(Result)}.
-  
-% internal API from_json functions
+  {KeyList} = ?JSON_DECODE(map_match([remove_leading_spaces(B) || B <- MapParts], <<>>)),
+  % post process group layer properties together in arrays
+  {ok, group_layers(KeyList, [])}.   
 
+
+% internal API from_json functions
 parse([], Acc) ->
   Acc;
 
@@ -66,6 +68,11 @@ parse([{K, V} | Rem], Acc) when is_binary(V) ->
   MapLine = write_line(K, V),
   parse(Rem, <<Acc/binary, "\n",  MapLine/binary>>);
 
+
+parse([{<<?LAYERS>>, LayerList} | Rem], Acc) ->
+  % reconstruct individual layer objects
+  NewAcc = parse([{<<?LAYER>>, Tuple} || Tuple <- LayerList], <<>>),
+  parse(Rem, <<Acc/binary, "\n", NewAcc/binary>>);
 
 % value is a JSON list
 parse([{K, V} | Rem], Acc) when is_list(V) ->
@@ -388,14 +395,30 @@ remove_leading_spaces(<<" ",Rest/binary>>) ->
 remove_leading_spaces(WithoutSpaces) ->
     WithoutSpaces.
 
+group_layers(TupleList, Layers) ->
+  case lists:keytake(<<"layer">>, 1, TupleList) of
+    {value, LayerTuple, RemTuples} ->
+       group_layers(RemTuples, [LayerTuple | Layers]);
+    _ ->
+      case length(Layers) of
+          0 ->
+            {TupleList};
+          1 ->
+            {TupleList ++ Layers};
+          _ ->
+ 	    {TupleList  ++ [{<<?LAYERS>>, [LayerContents || {_, LayerContents} <- lists:reverse(Layers)] }]}
+      end
+  end.
+
 test() ->
   {ok, MapFile} = file:read_file("sample.map"),
   {ok, JsonMap} = to_json(MapFile),  
-  {ok, JsonFd} = file:open("result.json", [write, binary]),
-  file:write(JsonFd, JsonMap),
+
+  {ok, JsonFd} = file:open("result.json", [write]),
+  file:write(JsonFd, ?JSON_ENCODE(JsonMap)),
   file:close(JsonFd),
 
-  {ok, NewMapFile} = from_json(?JSON_DECODE(JsonMap)),
-  {ok, MapFd} = file:open("result.map", [write, binary]),
+  {ok, NewMapFile} = from_json(JsonMap),
+  {ok, MapFd} = file:open("result.map", [write]),
   file:write(MapFd, NewMapFile),
   file:close(MapFd).

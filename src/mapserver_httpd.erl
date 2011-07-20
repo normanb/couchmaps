@@ -68,7 +68,7 @@ handle_request(#httpd{
       % get the post body
       {ok, JsonMap} = mapfile:to_json(couch_httpd:body(Req)), 
       % write this doc to couch,
-      {DocId, NewRev} = write_doc_to_couch(Db, #doc{id=MapFile, revs={0, []}, body=?JSON_DECODE(JsonMap)}, []),
+      {DocId, NewRev} = write_doc_to_couch(Db, #doc{id=MapFile, revs={0, []}, body=JsonMap}, []),
       Loc = couch_httpd:absolute_uri(Req, "/" ++ ?b2l(Db#db.name) ++ "/" ++ ?b2l(DocId)),
       RespHeaders = [{"Location", Loc}],
       couch_httpd:send_json(Req, 201, RespHeaders, {[{id, DocId}, {rev, couch_doc:rev_to_str(NewRev)}]})
