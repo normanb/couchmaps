@@ -14,7 +14,7 @@ MapServer is an Open Source platform for publishing spatial data and interactive
 Requirements
 -------------
 
-1) CouchOne trunk
+1) Couchbase trunk
 
 https://github.com/couchbase/couchdb-manifest (I used the preview branch and set up rake / ruby using RVM)
 
