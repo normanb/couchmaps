@@ -11,46 +11,52 @@
 % the License.
 -module(mapserver_httpd).
 
--export([handle_request/2]).
+-export([handle_request/2, ows_callback/2]).
 
 -import(couch_httpd, [send_method_not_allowed/2, send_error/4, send_json/3]).
 
 -include("couch_db.hrl").
 
 %% Database request handlers
+
+% list method, list returns a mapfile format in mapserver text format
 handle_request(#httpd{
     method='GET',
-    db_frontend=DbFrontend,
+    path_parts=[DbName, _MapServ,_Design, DDocName, _List, ListFunc, ViewFunc]
+}=Req, _Db) ->
+   % make http request to couchdb for map file, assume localhost 
+   % ibrowse has already been started by CouchDB
+   % assume localhost and vanilla http is enabled for localhost
+   Port = couch_config:get("httpd", "port", "5984"),
+   Link = lists:flatten(io_lib:format("http://localhost:~s/~s/_design/~s/_list/~s/~s",
+	 [Port, DbName, DDocName, ListFunc, ViewFunc])),
+
+   case ibrowse:send_req(Link, [], get) of
+     {ok, _, _, ResponseBody} ->
+	process(Req, ResponseBody);
+     {error, Reason} ->
+	couch_httpd:send_response(Req, 500, [], Reason)
+   end;
+   
+   
+
+handle_request(#httpd{
+    method='GET',
+    db_frontend=DbFrontend, % couchbase
     path_parts=[_DbName, _MapServ, MapFile]
 }=Req, Db) ->
   % format the request
   % get the MapServer mapfile in JSON format from couchdb and call mapserver
-  case DbFrontend:couch_doc_open(Db, MapFile, nil, []) of
+  case DbFrontend:couch_doc_open(Db, MapFile, nil, []) of % couchbase
+    % case couch_httpd_db:couch_doc_open(Db, MapFile, nil, []) of
     {not_found, _} ->
 	% nothing to do send message back
 	couch_httpd:send_response(Req, 204, [], <<>>);
     Doc ->
         {[_id, _rev | Rem]} = couch_doc:to_json_obj(Doc, []),
-  	TmpDir = couch_config:get("mapserver", "tmp", "/tmp"),
-        
         % transform the JSON doc to MapServer mapfile format
         {ok, NewMapFile} = mapfile:from_json({Rem}),  
-        
-	% create the temp file in TmpDir
-        MapName = filename:join([TmpDir,
-		lists:flatten(io_lib:format("~p.map", [erlang:phash2(make_ref())]))]),
-        {ok, Fd} = file:open(MapName, [write]),
-        file:write(Fd, NewMapFile),
-        file:close(Fd),
-       
-        QueryString = lists:foldl(fun({K, V}, Acc) ->
-             Acc ++ "&" ++ K ++ "=" ++ V
-        end, "map=" ++ MapName, couch_httpd:qs(Req)),
-
-  	{Code, Headers, Body} = mapserver:request(QueryString),
-        file:delete(MapName),
-  	
-        couch_httpd:send_response(Req, Code, Headers, Body)
+	process(Req, NewMapFile)
    end;
 
 %% Database request handlers
@@ -77,7 +83,39 @@ handle_request(#httpd{
 handle_request(Req, _Db) ->
     send_method_not_allowed(Req, "GET/PUT").
 
+ows_callback(Data, {Req, 0}) ->
+  Hdrs = binary_to_list(Data),
+  [MimeType | MimeValue] = string:tokens(string:strip(Hdrs, right, $\n), ":"),
+  {ok, Resp} = couch_httpd:start_chunked_response(Req, 200, [{MimeType, lists:flatten(MimeValue)}]),   
+  {Resp, 1};
+
+ows_callback(done, {Resp, _}) ->
+  couch_httpd:last_chunk(Resp);
+
+ows_callback(Data, {Resp, Counter}) ->
+  couch_httpd:send_chunk(Resp, Data),
+  {Resp, Counter + 1}.
+
+
 % internal
+process(Req, MapFile) ->        
+  % create the temp file in TmpDir
+  TmpDir = couch_config:get("mapserver", "tmp", "/tmp"),
+        
+  MapName = filename:join([TmpDir,
+	      lists:flatten(io_lib:format("~p.map", [erlang:phash2(make_ref())]))]),
+  {ok, Fd} = file:open(MapName, [write]),
+  file:write(Fd, MapFile),
+  file:close(Fd),
+       
+  QueryString = lists:foldl(fun({K, V}, Acc) ->
+      Acc ++ "&" ++ K ++ "=" ++ V
+    end, "map=" ++ MapName, couch_httpd:qs(Req)),
+
+  Result = mapserver:request(QueryString, fun ?MODULE:ows_callback/2, {Req, 0}),
+  file:delete(MapName),
+  Result.
+
 write_doc_to_couch(Db, Doc, Options) ->
    case couch_db:update_doc(Db,  Doc, Options) of
       {ok, NewRev} ->

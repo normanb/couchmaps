@@ -140,6 +140,7 @@ process_element(?LAYER) -> map_element;
 process_element(?LAYERSET) -> map_element;
 process_element(?SYMBOLSET) -> map_element;
 process_element(?PROJECTION) -> map_element;
+process_element("PROCESSING") -> {map_element, quote};
 process_element("IMAGETYPE") -> map_element;
 process_element("EXTENT") -> map_element;
 process_element("SIZE") -> map_element;
@@ -166,6 +167,11 @@ process_element("TRANSFORM") -> map_element;
 process_element("DUMP") -> map_element;
 process_element("DATA") -> {map_element, quote};
 process_element("TEXT") -> {map_element, quote};
+process_element("DRIVER") -> {map_element, quote};
+process_element("MIMETYPE") -> {map_element, quote};
+process_element("IMAGEMODE") -> {map_element, quote};
+process_element("EXTENSION") -> {map_element, quote};
+process_element("FORMATOPTION") -> {map_element, quote};
 process_element(_Element) -> false.
 
 % internal API to_json functions

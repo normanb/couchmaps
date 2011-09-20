@@ -17,7 +17,7 @@
 -export([start_link/1]).
 
 %% API functions
--export([request/1]).
+-export([request/3]).
 
 %% gen_server callbacks
 -export([init/1, 
@@ -32,7 +32,7 @@
 %% Server state
 -record(state, {port, timeout}).
 
--define(PORT_OPTIONS, [stream, {line, 1024}, binary, exit_status, hide]).
+-define(PORT_OPTIONS, [{packet, 4}, exit_status, binary, hide]).
 
 %%%----------------------------------------------------------------------
 %%% API
@@ -41,14 +41,11 @@
 start_link(MapServExec) ->
     gen_server:start_link({local, ?MODULE}, mapserver, MapServExec, []).
 
-request(Msg) ->   
-    {H, Body} = gen_server:call(?MODULE, {mapserv, Msg}),
-    HeaderString = ?b2l(H),
-    % skip leading whitespace on value string
-    [K, [_|V]] = string:tokens(HeaderString, ":"),
-    % OGC returns error with a 200
-    {200, [{K, V}], Body}.
-    
+request(Msg, CallBackFunc, FuncState) when is_list(Msg) ->
+  request(list_to_binary(Msg), CallBackFunc, FuncState);
+
+request(Msg, CallBackFunc, FuncState) ->   
+  gen_server:call(?MODULE, {mapserv, Msg, CallBackFunc, FuncState}).
 
 %%%----------------------------------------------------------------------
 %%% Callback functions from gen_server
@@ -61,9 +58,9 @@ init(MapServExec) ->
 	"couchdb", "os_process_timeout", "5000")),
     {ok, #state{port = Port, timeout = Timeout}}.
 
-handle_call({mapserv, Msg}, _From, #state{port = Port, timeout = Timeout} = State) ->
-    port_command(Port, Msg ++ "\n"),
-    case collect_response(Port, Timeout) of
+handle_call({mapserv, Msg, CallBackFunc, FuncState}, _From, #state{port = Port, timeout = Timeout} = State) ->
+    port_command(Port, Msg),
+    case collect_response(Port, Timeout, CallBackFunc, FuncState) of
         {response, Response} -> 
             {reply, Response, State};
         timeout -> 
@@ -88,40 +85,17 @@ terminate(_Reason, #state{port = Port} = _State) ->
 %%% Internal functions
 %%%----------------------------------------------------------------------
 
-collect_response(Port, Timeout) ->
-    collect_response(Port, Timeout, {undefined, undefined}).
-
-collect_response(Port, Timeout, {Headers, Body} = Resp) ->
+collect_response(Port, Timeout, CallBackFunc, FuncState) ->
     receive
-        {Port, {data, {eol, <<"CouchDB_Done">>}}} ->
-            {response, Resp};
-        % empty new line, first occurence marks end of headers
-        {Port, {data, {eol, <<>>}}} ->
-           NewBody = case Body of 
-              undefined ->
-                 <<>>;
-              _ ->
-                 Body
-           end,
-           collect_response(Port, Timeout, {Headers, NewBody});
-        {Port, {data, {eol, Result}}} ->
-            case Body of
-                 undefined ->
-                   case Headers of 
-                      undefined ->
-            	        collect_response(Port, Timeout, {Result, undefined});
-                      _ ->
-                        collect_response(Port, Timeout, {<<Headers/binary, Result/binary>>, Body})
-                   end; 
-                 _ ->
-                   collect_response(Port, Timeout, {Headers, <<Body/binary, Result/binary>>})
-            end;
-        {Port, {data, {noeol, Result}}} ->
-            collect_response(Port, Timeout, {Headers, <<Body/binary, Result/binary>>})
-
-    %% Prevent the gen_server from hanging indefinitely in case the
-    %% spawned process is taking too long processing the request.
+        {'EXIT', Port, Reason} ->
+           ?LOG_ERROR("~p~n", [Reason]),
+           {response, CallBackFunc(done, FuncState)};
+        {Port, {data, <<"CouchDB_Done">>}} ->
+           {response, CallBackFunc(done, FuncState)};
+        {Port, {data, Data}} ->
+           NewState = CallBackFunc(Data, FuncState),
+           collect_response(Port, Timeout, CallBackFunc, NewState)
     after Timeout -> 
-            timeout
+      timeout
     end.
 

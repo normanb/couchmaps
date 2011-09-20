@@ -1,0 +1,36 @@
+MAP
+  IMAGETYPE      PNG24
+  SIZE           400 300
+  SHAPEPATH      "/data/"
+#  CONFIG "MS_ERRORFILE" "/tmp/ms_error.txt"
+  DEBUG 5
+
+  #
+  # Start of web interface definition
+  #
+  WEB
+    IMAGEPATH "/tmp/"
+    IMAGEURL "/var/www/html/tmp/"
+    METADATA
+      "ows_title"                  "OWS Demo Server for MapServer" ## REQUIRED
+      "ows_onlineresource"         "http://myhost:8000/mapserver/_mapserv/sample.map" ## Recommended
+      "ows_srs"                    "EPSG:4326 EPSG:4269 EPSG:3978 EPSG:3857" ## Recommended
+      "ows_abstract"               "This text describes my service." ## Recommended
+      "ows_enable_request" "*"
+    END
+  END
+
+  PROJECTION
+    "init=epsg:4326"
+  END 
+
+  LAYER 
+    NAME         sample
+    DATA         "San_Diego.tif"
+    STATUS       OFF
+    TYPE         RASTER
+    PROJECTION
+      "init=epsg:4326"
+    END
+  END
+END
